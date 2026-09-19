@@ -1,8 +1,8 @@
 # bFocus — SDK oficial .NET
 
-SDK oficial da [API pública do bFocus](https://api.bfocus.com.br) para .NET: clientes, contatos, produtos,
-release notes, base de conhecimento e agentes de IA — com novas tentativas idempotentes, erros tipados e
-assinatura de identidade do widget. Alvos `netstandard2.0` (.NET Framework 4.6.2+, .NET 6/7…) e `net8.0`.
+SDK oficial da [API pública do bFocus](https://api.bfocus.com.br) para .NET: clientes, pessoas, contatos,
+produtos, release notes, base de conhecimento e agentes de IA — com lotes, identificadores extras, novas
+tentativas idempotentes, erros tipados e assinatura de identidade do widget. Alvos `netstandard2.0` (.NET Framework 4.6.2+, .NET 6/7…) e `net8.0`.
 
 ```bash
 dotnet add package Bfocus --version 0.1.0
@@ -34,7 +34,7 @@ vai em `Authorization: Bearer <chave>` em toda requisição — a SDK cuida diss
 
 | Escopo | Libera |
 | --- | --- |
-| `customers:read` / `customers:write` | Clientes, contatos, produtos vinculados e interações |
+| `customers:read` / `customers:write` | Clientes, pessoas, contatos, produtos vinculados, interações, lotes e identificadores extras |
 | `products:read` / `products:write` | Catálogo de produtos |
 | `release_notes:read` / `release_notes:write` | Release notes |
 | `kb:read` / `kb:write` | Base de conhecimento |
@@ -127,6 +127,100 @@ await bfocus.Customers.Interactions.CreateAsync("ERP 1042", "Pedido 1042 faturad
 await foreach (var i in bfocus.Customers.Interactions.ListAllAsync("ERP 1042")) { /* … */ }
 
 await bfocus.Customers.DeleteAsync("ERP 1042");
+
+// Lote (até 500) e identificadores extras — detalhes abaixo
+var lote = await bfocus.Customers.BatchAsync(new[] { new CustomerBatchItem("erp-1042") { Name = "Padaria Estrela" } });
+await bfocus.Customers.Identifiers.AddAsync("erp-1042", "crm-88", label: "CRM");
+await bfocus.Customers.Identifiers.RemoveAsync("erp-1042", "crm-88");
+```
+
+### Pessoas — `bfocus.People`
+
+As pessoas de um cliente são quem abre o widget/portal. O id da pessoa é o do usuário no **seu** sistema (o
+mesmo `user.externalId` que o seu backend assina para o widget).
+
+```csharp
+var paula = await bfocus.People.UpsertAsync("erp-1042", "app-77", new PersonUpsert
+{
+    Name = "Paula Reis",
+    Email = "paula@padaria.example",
+    Role = "Financeiro",
+    IsPrimary = true,
+    ExtraEmails = new List<string> { "paula.reis@pessoal.example" },   // somam aos que já existem
+});
+Console.WriteLine(paula.Status);   // created | updated | unchanged
+
+var pessoas = await bfocus.People.ListAsync("erp-1042");   // com e sem acesso (Access)
+
+// Retira o acesso: a pessoa continua no histórico (chamados, conversas).
+var semAcesso = await bfocus.People.DeleteAsync("erp-1042", "app-77");   // semAcesso.Access == false
+
+// Devolve o acesso:
+await bfocus.People.UpsertAsync("erp-1042", "app-77", new PersonUpsert { Access = true });
+```
+
+- **Sem duplicar**: o e-mail (ou o telefone) acha a pessoa que já chegou por e-mail ou por outro sistema — ela é
+  **adotada** pelo seu id, nunca duplicada.
+- **Troca de cliente**: a mesma pessoa enviada com outro cliente é **transferida** para ele.
+- Parcial como todo upsert: `null` = omitido; `ClearFields = { nameof(PersonUpsert.Phone) }` envia `null`.
+- Erros comuns (`Code`): `PERSON_EMAIL_STAFF` (e-mail de alguém da sua equipe), `PERSON_EMAIL_TAKEN`,
+  `PERSON_PHONE_TAKEN`, `NAME_REQUIRED` (ao criar), `PERSON_NOT_FOUND`, `CUSTOMER_NOT_FOUND`.
+
+### Lotes — `Customers.BatchAsync` e `People.BatchAsync`
+
+Até **500** itens por chamada (`CustomersResource.MaxBatchSize` / `PeopleResource.MaxBatchSize`). Acima disso a SDK
+lança `ArgumentException` **antes** de qualquer requisição — ela **não** divide sozinha (diferente do
+`Kb.Articles.BatchUpsertAsync`), para que o `Index` de cada resultado seja sempre a posição no lote que **você**
+enviou. Fatie assim:
+
+```csharp
+var clientes = minhasEmpresas.Select(e => new CustomerBatchItem("erp-" + e.Id)
+{
+    Name = e.RazaoSocial,
+    Document = e.Cnpj,
+    Email = e.Email,
+}).ToList();
+
+for (var inicio = 0; inicio < clientes.Count; inicio += CustomersResource.MaxBatchSize)
+{
+    var fatia = clientes.GetRange(inicio, Math.Min(CustomersResource.MaxBatchSize, clientes.Count - inicio));
+    var resultado = await bfocus.Customers.BatchAsync(fatia);   // no .NET 6+: clientes.Chunk(500)
+
+    Console.WriteLine($"{resultado.Summary.Created} criados, {resultado.Summary.Updated} alterados, " +
+                      $"{resultado.Summary.Unchanged} sem mudança, {resultado.Summary.Error} com erro");
+    foreach (var r in resultado.Results.Where(r => r.Status == "error"))
+    {
+        Console.Error.WriteLine($"{fatia[r.Index].ExternalId}: {r.Error} (HTTP {r.Code})");   // ex.: NAME_REQUIRED
+    }
+}
+
+// Pessoas: cada item diz o cliente e o id da pessoa (no fio: {"customer_external_id", "person": {...}}).
+var resultadoPessoas = await bfocus.People.BatchAsync(new[]
+{
+    new PersonBatchItem("erp-1042", "app-77") { Name = "Paula Reis", Email = "paula@padaria.example" },
+    new PersonBatchItem("erp-1042", "app-78") { Name = "Rui Lima", Access = false },
+});
+```
+
+Cada resultado (`BatchItemResult`) traz `Index`, `Status` (`created`, `updated`, `unchanged` ou `error`),
+`ExternalId`, `MergedInto` (o id enviado é um identificador extra — este é o principal do cadastro), `Error`
+(código estável) e `Code` (o status HTTP que o item teria sozinho); `Summary` soma por status. **Um item com erro
+não desfaz os outros.** Lista vazia devolve o resultado zerado sem requisição. O lote é **uma** chamada: aceita
+`IdempotencyKey` como qualquer escrita.
+
+### Identificadores extras — `Customers.Identifiers` e `People.Identifiers`
+
+Liga o id de **outro** sistema seu (CRM, loja, app…) ao **mesmo** cadastro: depois disso, qualquer um dos ids
+acha o cliente/pessoa. É idempotente; se o id já pertence a outro cadastro, a API responde 409
+`IDENTIFIER_IN_USE` (`ConflictException`).
+
+```csharp
+var cliente = await bfocus.Customers.Identifiers.AddAsync("erp-1042", "crm-88", label: "CRM");
+foreach (var id in cliente.Identifiers) Console.WriteLine($"{id.ExternalId} ({id.Label}, via {id.Source})");
+await bfocus.Customers.Identifiers.RemoveAsync("erp-1042", "crm-88");
+
+var ids = await bfocus.People.Identifiers.AddAsync("app-77", "loja-5531");   // sem rótulo
+await bfocus.People.Identifiers.RemoveAsync("app-77", "loja-5531");
 ```
 
 ### Produtos — `bfocus.Products`
@@ -243,6 +337,85 @@ página vazia. Cada página é uma chamada nova (com `X-Request-Id` próprio).
 As listagens de artigos (e o resultado do lote) trazem `KbArticleSummary`, sem corpo; `GetAsync`, `UpsertAsync`,
 `PublishAsync` e `UnpublishAsync` devolvem `KbArticle`, que acrescenta `BodyHtml`.
 
+## Sincronizar clientes e usuários do seu sistema
+
+**Ids com o prefixo do sistema, sem `:`.** Use `-` como separador — `erp-1042` para clientes, `app-77` para
+pessoas — ou UUIDs puros: vários sistemas seus convivem no mesmo bFocus sem colisão. Nada de `:` (a assinatura
+do widget recusa `:` no id do usuário, e é mais simples usar a mesma regra em tudo).
+
+**Carga inicial (no deploy):** clientes em fatias de 500 → vincule cada cliente ao produto → pessoas em fatias de
+500. Confira `Summary.Error` e registre os itens com erro.
+
+```csharp
+foreach (var fatia in Fatias(clientes, CustomersResource.MaxBatchSize))
+{
+    Registrar(fatia, await bfocus.Customers.BatchAsync(fatia));
+}
+
+foreach (var c in clientes)
+{
+    await bfocus.Customers.Products.AttachAsync(c.ExternalId!, "erp-cloud");   // idempotente
+}
+
+foreach (var fatia in Fatias(pessoas, PeopleResource.MaxBatchSize))
+{
+    Registrar(fatia, await bfocus.People.BatchAsync(fatia));
+}
+
+static IEnumerable<List<T>> Fatias<T>(List<T> itens, int tamanho)
+{
+    for (var i = 0; i < itens.Count; i += tamanho)
+        yield return itens.GetRange(i, Math.Min(tamanho, itens.Count - i));
+}
+
+static void Registrar<T>(List<T> fatia, BatchResult resultado)
+{
+    foreach (var r in resultado.Results)
+    {
+        if (r.Status == "error") Console.Error.WriteLine($"item {r.Index}: {r.Error}");
+        else if (r.MergedInto is not null) Console.WriteLine($"item {r.Index}: o principal agora é {r.MergedInto}");
+    }
+}
+```
+
+**Depois, no dia a dia**, espelhe cada evento do seu sistema:
+
+| No seu sistema | No bFocus |
+| --- | --- |
+| criou/alterou cliente | `Customers.UpsertAsync` (e `Customers.Products.AttachAsync` para vinculá-lo ao produto) |
+| criou/alterou usuário | `People.UpsertAsync` |
+| excluiu/desativou usuário | `People.DeleteAsync` (retira o acesso; o histórico fica) |
+| excluiu cliente | `Customers.DeleteAsync` |
+
+Se um resultado de lote trouxer `MergedInto`, atualize o id do seu lado.
+
+**Nunca bloqueie a requisição do seu usuário esperando o bFocus.** Grave no seu banco, enfileire (job/outbox) e
+deixe um worker sincronizar, tentando de novo com backoff. A SDK já repete `429`/`5xx` com a mesma
+`Idempotency-Key`; a fila cobre indisponibilidades longas.
+
+```csharp
+// record SincronizarUsuario(string Id, string UsuarioId, string EmpresaId);   // Id: único por evento
+// No endpoint do seu sistema: salva e enfileira — sem chamar o bFocus aqui.
+await outbox.EnqueueAsync(new SincronizarUsuario(Guid.NewGuid().ToString("N"), usuario.Id, usuario.EmpresaId));
+
+// No worker da fila (Hangfire, MassTransit, BackgroundService…), que repete com backoff se lançar:
+public async Task HandleAsync(SincronizarUsuario job, CancellationToken ct)
+{
+    var u = await db.Usuarios.FindAsync(job.UsuarioId);
+    var opcoes = new RequestOptions { IdempotencyKey = job.Id };   // mesma chave em toda repetição do job
+    if (u is { Ativo: true })
+    {
+        await bfocus.People.UpsertAsync("erp-" + job.EmpresaId, "app-" + job.UsuarioId,
+            new PersonUpsert { Name = u.Nome, Email = u.Email, Access = true }, opcoes, ct);
+    }
+    else
+    {
+        try { await bfocus.People.DeleteAsync("erp-" + job.EmpresaId, "app-" + job.UsuarioId, opcoes, ct); }
+        catch (NotFoundException) { /* já não existe: nada a fazer */ }
+    }
+}
+```
+
 ## Erros
 
 Qualquer status fora de 2xx vira uma `BfocusException` (namespace `Bfocus`):
@@ -285,7 +458,8 @@ catch (BfocusException e)
 ```
 
 Argumento inválido (chave vazia; parâmetro de caminho vazio, `"."` ou `".."`; `/` no `external_id` de artigo;
-campo desconhecido em `ClearFields`) lança `ArgumentException` **antes** de qualquer requisição. Cancelar pelo `CancellationToken` lança
+campo desconhecido em `ClearFields`; lote de clientes/pessoas com mais de 500 itens; `:` no id do usuário da
+assinatura v2) lança `ArgumentException` **antes** de qualquer requisição. Cancelar pelo `CancellationToken` lança
 `OperationCanceledException` (não é erro de rede e não gera nova tentativa).
 
 ## Novas tentativas e idempotência
@@ -315,6 +489,23 @@ var assinatura = WidgetIdentity.Sign(
     userExternalId: usuario.Id,          // o usuário logado, no seu sistema
     customerExternalId: usuario.EmpresaId);
 // HMAC-SHA256(secret, "v1:" + userExternalId + ":" + customerExternalId), hex minúsculo
+```
+
+### Identidade do widget v2 (com validade)
+
+A v2 carrega o instante da assinatura e **expira**: a API a aceita de 7 dias atrás até 5 minutos à frente. Gere a
+cada renderização da página — nunca guarde. Vai no `userHash` do widget, no mesmo lugar da v1 (que continua
+aceita):
+
+```csharp
+var userHash = WidgetIdentity.SignV2(
+    secret: configuration["Bfocus:WidgetSecret"]!,
+    userExternalId: "app-" + usuario.Id,          // NÃO pode ter ':' (é o separador) → ArgumentException
+    customerExternalId: "erp-" + usuario.EmpresaId);
+// "v2.<ts>.<hex>": ts = segundos unix de agora;
+// hex = HMAC-SHA256(secret, "v2:" + ts + ":" + userExternalId + ":" + customerExternalId), minúsculo
+
+// Instante fixo (testes): WidgetIdentity.SignV2(secret, usuario, cliente, DateTimeOffset.FromUnixTimeSeconds(1789000000))
 ```
 
 ## Fixe a versão exata

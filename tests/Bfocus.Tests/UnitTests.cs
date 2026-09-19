@@ -89,6 +89,134 @@ public class UnitTests
         Assert.False(items[1].TryGetProperty("product", out _));
     }
 
+    // ── lotes de clientes e pessoas (até 500, sem divisão) ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CustomersBatch_Over500_ThrowsArgumentException_BeforeAnyRequest()
+    {
+        using var server = new MockServer { Handler = EchoItems };
+        using var client = Client(server);
+
+        var items = Enumerable.Range(1, 501).Select(i => new CustomerBatchItem($"erp-{i}") { Name = $"Cliente {i}" });
+        var error = Assert.Throws<ArgumentException>(() => { _ = client.Customers.BatchAsync(items); });
+
+        Assert.Equal("items", error.ParamName);
+        Assert.StartsWith("customers.batch aceita até 500 itens por chamada (recebeu 501); divida em lotes de 500.", error.Message);
+        await Task.Yield();
+        Assert.Empty(server.Requests);
+    }
+
+    [Fact]
+    public async Task PeopleBatch_Over500_ThrowsArgumentException_BeforeAnyRequest()
+    {
+        using var server = new MockServer { Handler = EchoItems };
+        using var client = Client(server);
+
+        var items = Enumerable.Range(1, 501).Select(i => new PersonBatchItem("erp-1042", $"app-{i}") { Name = $"Pessoa {i}" });
+        var error = Assert.Throws<ArgumentException>(() => { _ = client.People.BatchAsync(items); });
+
+        Assert.StartsWith("people.batch aceita até 500 itens por chamada (recebeu 501); divida em lotes de 500.", error.Message);
+        await Task.Yield();
+        Assert.Empty(server.Requests);
+    }
+
+    [Fact]
+    public async Task CustomersBatch_500_IsOneRequest_WithEveryItem()
+    {
+        using var server = new MockServer { Handler = EchoItems };
+        using var client = Client(server);
+
+        var items = Enumerable.Range(1, CustomersResource.MaxBatchSize).Select(i => new CustomerBatchItem($"erp-{i}") { Name = $"Cliente {i}" }).ToList();
+        var result = await client.Customers.BatchAsync(items, new RequestOptions { IdempotencyKey = "carga-1" });
+
+        var request = server.Requests.Single();
+        Assert.Equal("/api/v1/integration/customers/batch", request.Path);
+        Assert.Equal("carga-1", request.Header("Idempotency-Key"));
+        using var body = JsonDocument.Parse(request.Body);
+        var sent = body.RootElement.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(500, sent.Count);
+        Assert.Equal("erp-500", sent[499].GetProperty("external_id").GetString());
+        Assert.Equal(500, result.Results.Count);
+        Assert.Equal(500, result.Summary.Created);
+    }
+
+    [Fact]
+    public async Task PeopleBatch_500_IsOneRequest_WithCustomerOutsideAndIdInsidePerson()
+    {
+        using var server = new MockServer { Handler = EchoItems };
+        using var client = Client(server);
+
+        var items = Enumerable.Range(1, PeopleResource.MaxBatchSize)
+            .Select(i => new PersonBatchItem("erp-1042", $"app-{i}") { Name = $"Pessoa {i}", ClearFields = { nameof(PersonUpsert.Phone) } })
+            .ToList();
+        await client.People.BatchAsync(items);
+
+        var request = server.Requests.Single();
+        Assert.Equal("/api/v1/integration/people/batch", request.Path);
+        using var body = JsonDocument.Parse(request.Body);
+        var sent = body.RootElement.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(500, sent.Count);
+        Assert.Equal("erp-1042", sent[0].GetProperty("customer_external_id").GetString());
+        var person = sent[0].GetProperty("person");
+        Assert.Equal("app-1", person.GetProperty("external_id").GetString());
+        Assert.Equal(JsonValueKind.Null, person.GetProperty("phone").ValueKind);
+        Assert.False(person.TryGetProperty("customer_external_id", out _));
+        Assert.False(person.TryGetProperty("email", out _));
+    }
+
+    [Fact]
+    public async Task Batches_RejectItemsWithoutIds_AndEmptyMakesNoRequest()
+    {
+        using var server = new MockServer { Handler = EchoItems };
+        using var client = Client(server);
+
+        Assert.Throws<ArgumentException>(() => { _ = client.Customers.BatchAsync(new[] { new CustomerBatchItem() }); });
+        Assert.Throws<ArgumentException>(() => { _ = client.People.BatchAsync(new[] { new PersonBatchItem { ExternalId = "app-1" } }); });
+        Assert.Throws<ArgumentException>(() => { _ = client.People.BatchAsync(new[] { new PersonBatchItem { CustomerExternalId = "erp-1" } }); });
+        Assert.Throws<ArgumentException>(() => new CustomerBatchItem { ClearFields = { "external_id" } });
+
+        var empty = await client.People.BatchAsync(Array.Empty<PersonBatchItem>());
+        Assert.Empty(empty.Results);
+        Assert.Equal(0, empty.Summary.Created + empty.Summary.Updated + empty.Summary.Unchanged + empty.Summary.Error);
+        Assert.Empty(server.Requests);
+    }
+
+    // ── identidade do widget v2 ────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SignV2_WithoutInstant_UsesNow()
+    {
+        var signature = WidgetIdentity.SignV2("bf_whs_x", "app-77", "erp-1042");
+
+        var match = Regex.Match(signature, "^v2\\.(\\d+)\\.([0-9a-f]{64})$");
+        Assert.True(match.Success, signature);
+        var ts = long.Parse(match.Groups[1].Value);
+        Assert.InRange(ts, DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 5, DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 5);
+        Assert.Equal(signature, WidgetIdentity.SignV2("bf_whs_x", "app-77", "erp-1042", DateTimeOffset.FromUnixTimeSeconds(ts)));
+    }
+
+    [Fact]
+    public void SignV2_FloorsFractionalSeconds_AndAcceptsAnyOffset()
+    {
+        var at = new DateTimeOffset(2026, 9, 19, 9, 0, 0, 999, TimeSpan.FromHours(-3));
+        var expectedTs = at.ToUnixTimeSeconds();
+
+        Assert.StartsWith($"v2.{expectedTs}.", WidgetIdentity.SignV2("s", "u", "c", at));
+        Assert.Equal(WidgetIdentity.SignV2("s", "u", "c", at), WidgetIdentity.SignV2("s", "u", "c", at.ToUniversalTime().AddMilliseconds(-999)));
+    }
+
+    [Fact]
+    public void SignV2_RejectsColonInUser_EmptySecret_AndInstantBeforeEpoch()
+    {
+        Assert.Throws<ArgumentException>(() => WidgetIdentity.SignV2("s", "app:77", "erp-1042"));
+        Assert.Throws<ArgumentException>(() => WidgetIdentity.SignV2("", "app-77", "erp-1042"));
+        Assert.Throws<ArgumentException>(() => WidgetIdentity.SignV2("s", "app-77", "erp-1042", DateTimeOffset.FromUnixTimeSeconds(-1)));
+
+        // O id do CLIENTE pode ter ':'; a v1 não muda.
+        Assert.StartsWith("v2.", WidgetIdentity.SignV2("s", "app-77", "legado:1042"));
+        Assert.Matches("^[0-9a-f]{64}$", WidgetIdentity.Sign("s", "app:77", "erp-1042"));
+    }
+
     // ── ListAll percorrendo páginas ────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -444,6 +572,17 @@ public class UnitTests
     {
         using var doc = JsonDocument.Parse(request.Body);
         return doc.RootElement.GetProperty("articles").EnumerateArray().Select(a => a.GetProperty("external_id").GetString()).ToList();
+    }
+
+    private static MockResponse EchoItems(RecordedRequest request)
+    {
+        using var doc = JsonDocument.Parse(request.Body);
+        var count = doc.RootElement.GetProperty("items").GetArrayLength();
+        return MockResponse.Ok(new
+        {
+            results = Enumerable.Range(0, count).Select(i => new { index = i, status = "created", external_id = (string?)null, merged_into = (string?)null, error = (string?)null, code = (int?)null }),
+            summary = new { created = count, updated = 0, unchanged = 0, error = 0 },
+        });
     }
 
     private static MockResponse EchoBatch(RecordedRequest request)

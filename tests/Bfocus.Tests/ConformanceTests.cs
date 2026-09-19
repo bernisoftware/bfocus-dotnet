@@ -33,6 +33,16 @@ public class ConformanceTests
             s.GetProperty("expected").GetString()!,
         });
 
+    public static IEnumerable<object[]> SignaturesV2() =>
+        Conformance.Root.GetProperty("signatures_v2").EnumerateArray().Select(s => new object[]
+        {
+            s.GetProperty("secret").GetString()!,
+            s.GetProperty("user_external_id").GetString()!,
+            s.GetProperty("customer_external_id").GetString()!,
+            s.GetProperty("timestamp").GetInt64(),
+            s.GetProperty("expected").GetString()!,
+        });
+
     [Theory]
     [MemberData(nameof(CaseIds))]
     public async Task Case(string id)
@@ -123,6 +133,13 @@ public class ConformanceTests
     public void Signature(string secret, string userExternalId, string customerExternalId, string expected)
     {
         Assert.Equal(expected, WidgetIdentity.Sign(secret, userExternalId, customerExternalId));
+    }
+
+    [Theory]
+    [MemberData(nameof(SignaturesV2))]
+    public void SignatureV2(string secret, string userExternalId, string customerExternalId, long timestamp, string expected)
+    {
+        Assert.Equal(expected, WidgetIdentity.SignV2(secret, userExternalId, customerExternalId, DateTimeOffset.FromUnixTimeSeconds(timestamp)));
     }
 
     [Fact]

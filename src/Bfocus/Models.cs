@@ -9,7 +9,7 @@ namespace Bfocus;
 // campos extras, eles ficam em AdditionalProperties.
 
 /// <summary>Cliente.</summary>
-public sealed class Customer
+public class Customer
 {
     /// <summary>Id no bFocus (UUID).</summary>
     [JsonPropertyName("id")]
@@ -58,6 +58,30 @@ public sealed class Customer
     /// <summary>Alterado em.</summary>
     [JsonPropertyName("updated_at")]
     public DateTimeOffset? UpdatedAt { get; set; }
+}
+
+/// <summary>Cliente com os identificadores extras (<see cref="CustomerIdentifiersResource"/>).</summary>
+public sealed class CustomerWithIdentifiers : Customer
+{
+    /// <summary>Identificadores extras (o principal é <see cref="Customer.ExternalId"/>).</summary>
+    [JsonPropertyName("identifiers")]
+    public IReadOnlyList<Identifier> Identifiers { get; set; } = Array.Empty<Identifier>();
+}
+
+/// <summary>Identificador extra de um cliente ou pessoa (o id de outro sistema seu ligado ao mesmo cadastro).</summary>
+public sealed class Identifier
+{
+    /// <summary>O identificador extra.</summary>
+    [JsonPropertyName("external_id")]
+    public string ExternalId { get; set; } = string.Empty;
+
+    /// <summary>Rótulo livre (ex.: nome do sistema).</summary>
+    [JsonPropertyName("label")]
+    public string? Label { get; set; }
+
+    /// <summary>Quem ligou: <c>api</c>, <c>panel</c>, <c>import</c>…</summary>
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = string.Empty;
 }
 
 /// <summary>Campo personalizado de um cliente.</summary>
@@ -130,6 +154,125 @@ public sealed class Contact
     /// <summary>Alterado em.</summary>
     [JsonPropertyName("updated_at")]
     public DateTimeOffset? UpdatedAt { get; set; }
+}
+
+/// <summary>Pessoa de um cliente (quem abre o widget/portal).</summary>
+public class Person
+{
+    /// <summary>Id da pessoa no seu sistema (<c>null</c> = contato do cliente sem acesso, sem identificador).</summary>
+    [JsonPropertyName("external_id")]
+    public string? ExternalId { get; set; }
+
+    /// <summary>Nome.</summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>E-mail.</summary>
+    [JsonPropertyName("email")]
+    public string? Email { get; set; }
+
+    /// <summary>Telefone.</summary>
+    [JsonPropertyName("phone")]
+    public string? Phone { get; set; }
+
+    /// <summary>Cargo/função no cliente.</summary>
+    [JsonPropertyName("role")]
+    public string? Role { get; set; }
+
+    /// <summary>Pode abrir o widget/portal do cliente.</summary>
+    [JsonPropertyName("access")]
+    public bool Access { get; set; }
+
+    /// <summary>Contato principal do cliente.</summary>
+    [JsonPropertyName("is_primary")]
+    public bool IsPrimary { get; set; }
+
+    /// <summary><c>external_id</c> principal do cliente a que a pessoa pertence.</summary>
+    [JsonPropertyName("customer_external_id")]
+    public string CustomerExternalId { get; set; } = string.Empty;
+}
+
+/// <summary>Resultado de <see cref="PeopleResource.UpsertAsync"/>: a pessoa + o que aconteceu.</summary>
+public sealed class PersonUpsertResult : Person
+{
+    /// <summary><c>created</c>, <c>updated</c> ou <c>unchanged</c>.</summary>
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+}
+
+/// <summary>Identificadores extras de uma pessoa (<see cref="PersonIdentifiersResource"/>).</summary>
+public sealed class PersonIdentifiers
+{
+    /// <summary>Identificador principal da pessoa.</summary>
+    [JsonPropertyName("external_id")]
+    public string? ExternalId { get; set; }
+
+    /// <summary>Identificadores extras.</summary>
+    [JsonPropertyName("identifiers")]
+    public IReadOnlyList<Identifier> Identifiers { get; set; } = Array.Empty<Identifier>();
+}
+
+/// <summary>
+/// Resultado de <see cref="CustomersResource.BatchAsync"/> e <see cref="PeopleResource.BatchAsync"/>: um resultado por
+/// item + o resumo. Um item com erro não desfaz os outros.
+/// </summary>
+public sealed class BatchResult
+{
+    /// <summary>Um resultado por item, na ordem enviada (<see cref="BatchItemResult.Index"/> = posição no lote).</summary>
+    [JsonPropertyName("results")]
+    public IReadOnlyList<BatchItemResult> Results { get; set; } = Array.Empty<BatchItemResult>();
+
+    /// <summary>Contagem por status.</summary>
+    [JsonPropertyName("summary")]
+    public BatchSummary Summary { get; set; } = new BatchSummary();
+}
+
+/// <summary>Resultado de um item do lote.</summary>
+public sealed class BatchItemResult
+{
+    /// <summary>Posição do item no lote enviado (0 = primeiro).</summary>
+    [JsonPropertyName("index")]
+    public int Index { get; set; }
+
+    /// <summary><c>created</c>, <c>updated</c>, <c>unchanged</c> ou <c>error</c>.</summary>
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    /// <summary>Identificador do item (o principal, depois do upsert).</summary>
+    [JsonPropertyName("external_id")]
+    public string? ExternalId { get; set; }
+
+    /// <summary>O id enviado é um identificador extra: este é o principal do cadastro único — atualize o seu lado.</summary>
+    [JsonPropertyName("merged_into")]
+    public string? MergedInto { get; set; }
+
+    /// <summary>Código estável do erro do item (só com <see cref="Status"/> = <c>error</c>; ex.: <c>NAME_REQUIRED</c>).</summary>
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+
+    /// <summary>Status HTTP que o item teria sozinho (só em erro).</summary>
+    [JsonPropertyName("code")]
+    public int? Code { get; set; }
+}
+
+/// <summary>Resumo de um lote: quantos itens por status.</summary>
+public sealed class BatchSummary
+{
+    /// <summary>Criados.</summary>
+    [JsonPropertyName("created")]
+    public int Created { get; set; }
+
+    /// <summary>Alterados.</summary>
+    [JsonPropertyName("updated")]
+    public int Updated { get; set; }
+
+    /// <summary>Sem mudança.</summary>
+    [JsonPropertyName("unchanged")]
+    public int Unchanged { get; set; }
+
+    /// <summary>Com erro (veja <see cref="BatchItemResult.Error"/>).</summary>
+    [JsonPropertyName("error")]
+    public int Error { get; set; }
 }
 
 /// <summary>Referência resumida a um produto.</summary>

@@ -8,7 +8,7 @@ namespace Bfocus;
 /// Corpo de <see cref="CustomersResource.UpsertAsync"/> (<c>PUT /customers/{external_id}</c>). Parcial: propriedade
 /// <c>null</c> = omitida; para limpar, use <see cref="PatchRequest.ClearFields"/>.
 /// </summary>
-public sealed class CustomerUpsert : PatchRequest
+public class CustomerUpsert : PatchRequest
 {
     /// <summary>Nome (até 500).</summary>
     [JsonPropertyName("name")]
@@ -37,6 +37,30 @@ public sealed class CustomerUpsert : PatchRequest
     /// <summary>Campos personalizados. Quando enviada, a lista SUBSTITUI a atual (lista vazia apaga todos).</summary>
     [JsonPropertyName("custom_fields")]
     public IList<CustomFieldInput>? CustomFields { get; set; }
+}
+
+/// <summary>
+/// Item de <see cref="CustomersResource.BatchAsync"/>: um <see cref="CustomerUpsert"/> com o seu <c>external_id</c>
+/// (o mesmo corpo do upsert — só o que veio; <see cref="PatchRequest.ClearFields"/> envia <c>null</c>).
+/// </summary>
+public sealed class CustomerBatchItem : CustomerUpsert
+{
+    /// <summary>Cria o item (preencha <see cref="ExternalId"/>).</summary>
+    public CustomerBatchItem()
+    {
+    }
+
+    /// <summary>Cria o item para o cliente <paramref name="externalId"/>.</summary>
+    /// <param name="externalId">Id do cliente no seu sistema (ex.: <c>erp-1042</c>).</param>
+    public CustomerBatchItem(string externalId)
+    {
+        ExternalId = externalId;
+    }
+
+    /// <summary>Id do cliente no seu sistema (obrigatório).</summary>
+    [JsonPropertyName("external_id")]
+    [NotClearable]
+    public string? ExternalId { get; set; }
 }
 
 /// <summary>Campo personalizado enviado em <see cref="CustomerUpsert.CustomFields"/>.</summary>
@@ -113,6 +137,78 @@ public sealed class ContactUpsert : PatchRequest
     /// <summary>Contato principal do cliente.</summary>
     [JsonPropertyName("is_primary")]
     public bool? IsPrimary { get; set; }
+}
+
+/// <summary>
+/// Campos de uma pessoa em <see cref="PeopleResource.UpsertAsync"/> (<c>PUT /customers/{external_id}/people/{person_external_id}</c>,
+/// enviados como <c>{"person": {…}}</c>). Parcial: propriedade <c>null</c> = omitida; para enviar <c>null</c>, use
+/// <see cref="PatchRequest.ClearFields"/>.
+/// </summary>
+public class PersonUpsert : PatchRequest
+{
+    /// <summary>Nome (obrigatório ao criar).</summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    /// <summary>E-mail. Acha a pessoa que já chegou por e-mail ou por outro sistema — ela é adotada, nunca duplicada.</summary>
+    [JsonPropertyName("email")]
+    public string? Email { get; set; }
+
+    /// <summary>Telefone (também identifica a pessoa já cadastrada).</summary>
+    [JsonPropertyName("phone")]
+    public string? Phone { get; set; }
+
+    /// <summary>Cargo/função no cliente (ex.: Financeiro).</summary>
+    [JsonPropertyName("role")]
+    public string? Role { get; set; }
+
+    /// <summary>Acesso ao widget/portal (padrão ao criar: <c>true</c>). <c>true</c> devolve o acesso retirado por <see cref="PeopleResource.DeleteAsync"/>.</summary>
+    [JsonPropertyName("access")]
+    public bool? Access { get; set; }
+
+    /// <summary>Contato principal do cliente.</summary>
+    [JsonPropertyName("is_primary")]
+    public bool? IsPrimary { get; set; }
+
+    /// <summary>E-mails adicionais (somam aos que já existem).</summary>
+    [JsonPropertyName("extra_emails")]
+    public IList<string>? ExtraEmails { get; set; }
+
+    /// <summary>Telefones adicionais (somam aos que já existem).</summary>
+    [JsonPropertyName("extra_phones")]
+    public IList<string>? ExtraPhones { get; set; }
+}
+
+/// <summary>
+/// Item de <see cref="PeopleResource.BatchAsync"/>: os campos de <see cref="PersonUpsert"/> + o cliente
+/// (<see cref="CustomerExternalId"/>) e o id da pessoa (<see cref="ExternalId"/>). No fio vira
+/// <c>{"customer_external_id": …, "person": {"external_id": …, …campos…}}</c>.
+/// </summary>
+public sealed class PersonBatchItem : PersonUpsert
+{
+    /// <summary>Cria o item (preencha <see cref="CustomerExternalId"/> e <see cref="ExternalId"/>).</summary>
+    public PersonBatchItem()
+    {
+    }
+
+    /// <summary>Cria o item para a pessoa <paramref name="externalId"/> do cliente <paramref name="customerExternalId"/>.</summary>
+    /// <param name="customerExternalId">Id do cliente no seu sistema.</param>
+    /// <param name="externalId">Id da pessoa no seu sistema (o <c>user.externalId</c> do widget; sem <c>:</c>).</param>
+    public PersonBatchItem(string customerExternalId, string externalId)
+    {
+        CustomerExternalId = customerExternalId;
+        ExternalId = externalId;
+    }
+
+    /// <summary>Id do cliente (empresa) da pessoa no seu sistema (obrigatório).</summary>
+    [JsonPropertyName("customer_external_id")]
+    [NotClearable]
+    public string? CustomerExternalId { get; set; }
+
+    /// <summary>Id da pessoa no seu sistema (obrigatório).</summary>
+    [JsonPropertyName("external_id")]
+    [NotClearable]
+    public string? ExternalId { get; set; }
 }
 
 /// <summary>

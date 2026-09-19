@@ -16,7 +16,7 @@ namespace Bfocus;
 public sealed class BfocusClient : IDisposable
 {
     /// <summary>Versão desta SDK (enviada no header <c>X-Bfocus-Client</c> de toda requisição).</summary>
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
 
     /// <summary>URL da API de produção, usada quando <see cref="BfocusClientOptions.BaseUrl"/> não é informado.</summary>
     public const string DefaultBaseUrl = "https://api.bfocus.com.br";
@@ -52,6 +52,7 @@ public sealed class BfocusClient : IDisposable
 
         Http = new BfocusHttp(apiKey, options);
         Customers = new CustomersResource(Http);
+        People = new PeopleResource(Http);
         Products = new ProductsResource(Http);
         ReleaseNotes = new ReleaseNotesResource(Http);
         Kb = new KbResource(Http);
@@ -60,6 +61,9 @@ public sealed class BfocusClient : IDisposable
 
     /// <summary>Clientes (e seus contatos, produtos vinculados e interações).</summary>
     public CustomersResource Customers { get; }
+
+    /// <summary>Pessoas dos clientes (quem abre o widget/portal), lotes e identificadores extras.</summary>
+    public PeopleResource People { get; }
 
     /// <summary>Catálogo de produtos.</summary>
     public ProductsResource Products { get; }

@@ -20,7 +20,11 @@ public sealed class CustomersResource
         Contacts = new CustomerContactsResource(http);
         Products = new CustomerProductsResource(http);
         Interactions = new CustomerInteractionsResource(http);
+        Identifiers = new CustomerIdentifiersResource(http);
     }
+
+    /// <summary>Máximo de itens por chamada de <see cref="BatchAsync"/> (limite da API; a SDK não divide sozinha).</summary>
+    public const int MaxBatchSize = Batch.MaxItems;
 
     /// <summary>Contatos dos clientes.</summary>
     public CustomerContactsResource Contacts { get; }
@@ -30,6 +34,9 @@ public sealed class CustomersResource
 
     /// <summary>Histórico de interações dos clientes.</summary>
     public CustomerInteractionsResource Interactions { get; }
+
+    /// <summary>Identificadores extras dos clientes (ids de outros sistemas seus ligados ao mesmo cadastro).</summary>
+    public CustomerIdentifiersResource Identifiers { get; }
 
     /// <summary>
     /// Cria ou atualiza o cliente <paramref name="externalId"/> (<c>PUT /customers/{external_id}</c>). Só os campos
@@ -93,6 +100,41 @@ public sealed class CustomersResource
     /// <returns><c>{ deleted: true }</c>.</returns>
     public Task<DeleteResult> DeleteAsync(string externalId, RequestOptions? options = null, CancellationToken cancellationToken = default) =>
         _http.RequestAsync<DeleteResult>(HttpMethod.Delete, CustomerPath(externalId), null, null, options, cancellationToken);
+
+    /// <summary>
+    /// Cria ou atualiza até <see cref="MaxBatchSize"/> clientes numa chamada (<c>POST /customers/batch</c>). Cada item
+    /// é o corpo do <see cref="UpsertAsync"/> + o seu <see cref="CustomerBatchItem.ExternalId"/>. A SDK NÃO divide:
+    /// acima de <see cref="MaxBatchSize"/> lança <see cref="ArgumentException"/> antes de qualquer requisição — fatie
+    /// do seu lado (o <see cref="BatchItemResult.Index"/> é a posição no lote enviado). Lista vazia devolve o
+    /// resultado zerado sem requisição. Um item com erro não desfaz os outros (veja <see cref="BatchResult.Summary"/>).
+    /// </summary>
+    /// <param name="items">Clientes (cada um com <see cref="CustomerBatchItem.ExternalId"/>).</param>
+    /// <param name="options">Opções da chamada (ex.: <c>IdempotencyKey</c> — um lote é uma chamada).</param>
+    /// <param name="cancellationToken">Cancelamento.</param>
+    /// <returns>Um resultado por item + o resumo.</returns>
+    /// <exception cref="ArgumentException">Mais de <see cref="MaxBatchSize"/> itens, item <c>null</c> ou sem <c>ExternalId</c>.</exception>
+    public Task<BatchResult> BatchAsync(IEnumerable<CustomerBatchItem> items, RequestOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var list = Batch.Take(items, "customers.batch", nameof(items));
+        if (list.Count == 0)
+        {
+            return Task.FromResult(new BatchResult());
+        }
+
+        var array = new JsonArray();
+        for (var i = 0; i < list.Count; i++)
+        {
+            var item = list[i] ?? throw new ArgumentException($"O cliente #{i} do lote é null.", nameof(items));
+            if (string.IsNullOrEmpty(item.ExternalId))
+            {
+                throw new ArgumentException($"O cliente #{i} do lote não tem ExternalId.", nameof(items));
+            }
+
+            array.Add(item.ToJsonObject());
+        }
+
+        return _http.RequestAsync<BatchResult>(HttpMethod.Post, "/customers/batch", null, Batch.Body(array), options, cancellationToken);
+    }
 
     internal static string CustomerPath(string externalId) => "/customers/" + PathSegment.Encode(externalId, nameof(externalId));
 }
@@ -242,4 +284,40 @@ public sealed class CustomerInteractionsResource
         var path = CustomersResource.CustomerPath(externalId) + "/interactions";
         return _http.RequestAsync<Interaction>(HttpMethod.Post, path, null, body.ToJsonString(BfocusJson.Options), options, cancellationToken);
     }
+}
+
+/// <summary>
+/// Identificadores extras de um cliente — <c>client.Customers.Identifiers</c>. Liga o id de outro sistema seu ao
+/// mesmo cadastro (idempotente); id que já é de outro cadastro → <see cref="ConflictException"/>
+/// <c>IDENTIFIER_IN_USE</c>.
+/// </summary>
+public sealed class CustomerIdentifiersResource
+{
+    private readonly BfocusHttp _http;
+
+    internal CustomerIdentifiersResource(BfocusHttp http) => _http = http;
+
+    /// <summary>Liga o identificador extra ao cliente (<c>PUT /customers/{external_id}/identifiers/{extra_id}</c>). Idempotente.</summary>
+    /// <param name="externalId">Id (principal ou extra) do cliente no seu sistema.</param>
+    /// <param name="extraId">Identificador extra (ex.: <c>crm-88</c>).</param>
+    /// <param name="label">Rótulo livre (ex.: nome do sistema). <c>null</c> = sem corpo.</param>
+    /// <param name="options">Opções da chamada.</param>
+    /// <param name="cancellationToken">Cancelamento.</param>
+    /// <returns>O cliente com os identificadores extras.</returns>
+    /// <exception cref="ConflictException"><c>IDENTIFIER_IN_USE</c> (o id já é de outro cadastro).</exception>
+    public Task<CustomerWithIdentifiers> AddAsync(string externalId, string extraId, string? label = null, RequestOptions? options = null, CancellationToken cancellationToken = default) =>
+        _http.RequestAsync<CustomerWithIdentifiers>(HttpMethod.Put, IdentifierPath(externalId, extraId), null, IdentifierBody.Label(label), options, cancellationToken);
+
+    /// <summary>Desliga o identificador extra do cliente (<c>DELETE /customers/{external_id}/identifiers/{extra_id}</c>).</summary>
+    /// <param name="externalId">Id (principal ou extra) do cliente no seu sistema.</param>
+    /// <param name="extraId">Identificador extra.</param>
+    /// <param name="options">Opções da chamada.</param>
+    /// <param name="cancellationToken">Cancelamento.</param>
+    /// <returns>O cliente com os identificadores extras restantes.</returns>
+    /// <exception cref="NotFoundException"><c>IDENTIFIER_NOT_FOUND</c>.</exception>
+    public Task<CustomerWithIdentifiers> RemoveAsync(string externalId, string extraId, RequestOptions? options = null, CancellationToken cancellationToken = default) =>
+        _http.RequestAsync<CustomerWithIdentifiers>(HttpMethod.Delete, IdentifierPath(externalId, extraId), null, null, options, cancellationToken);
+
+    private static string IdentifierPath(string externalId, string extraId) =>
+        CustomersResource.CustomerPath(externalId) + "/identifiers/" + PathSegment.Encode(extraId, nameof(extraId));
 }

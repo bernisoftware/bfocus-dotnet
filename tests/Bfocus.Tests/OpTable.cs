@@ -45,6 +45,31 @@ internal static class OpTable
         ["customers.interactions.create"] = async (c, a) =>
             await c.Customers.Interactions.CreateAsync(a.Str("external_id"), a.Str("content"), isInternal: a.OptBool("is_internal"), authorEmail: a.OptStr("author_email")),
 
+        ["customers.batch"] = async (c, a) =>
+            await c.Customers.BatchAsync(a.Raw("items")!.Value.EnumerateArray()
+                .Select(item => Args.BuildPatch<CustomerBatchItem>(JsonNode.Parse(item.GetRawText())!.AsObject()))
+                .ToList()),
+        ["customers.identifiers.add"] = async (c, a) =>
+            await c.Customers.Identifiers.AddAsync(a.Str("external_id"), a.Str("extra_id"), label: a.OptStr("label")),
+        ["customers.identifiers.remove"] = async (c, a) =>
+            await c.Customers.Identifiers.RemoveAsync(a.Str("external_id"), a.Str("extra_id")),
+
+        // Pessoas
+        ["people.upsert"] = async (c, a) =>
+            await c.People.UpsertAsync(a.Str("customer_external_id"), a.Str("person_external_id"), a.Patch<PersonUpsert>("customer_external_id", "person_external_id")),
+        ["people.list"] = async (c, a) =>
+            await c.People.ListAsync(a.Str("customer_external_id")),
+        ["people.delete"] = async (c, a) =>
+            await c.People.DeleteAsync(a.Str("customer_external_id"), a.Str("person_external_id")),
+        ["people.batch"] = async (c, a) =>
+            await c.People.BatchAsync(a.Raw("items")!.Value.EnumerateArray()
+                .Select(item => Args.BuildPatch<PersonBatchItem>(JsonNode.Parse(item.GetRawText())!.AsObject()))
+                .ToList()),
+        ["people.identifiers.add"] = async (c, a) =>
+            await c.People.Identifiers.AddAsync(a.Str("person_external_id"), a.Str("extra_id"), label: a.OptStr("label")),
+        ["people.identifiers.remove"] = async (c, a) =>
+            await c.People.Identifiers.RemoveAsync(a.Str("person_external_id"), a.Str("extra_id")),
+
         // Produtos
         ["products.list"] = async (c, a) =>
             await c.Products.ListAsync(includeInactive: a.OptBool("include_inactive")),
