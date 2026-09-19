@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <AssemblyName>Bfocus</AssemblyName>
+    <RootNamespace>Bfocus</RootNamespace>
+
+    <!-- Pacote NuGet. A versão existe aqui E em BfocusClient.Version; o release-sdks.sh bumpa as duas
+         e a suíte de testes trava que sejam iguais. -->
+    <PackageId>Bfocus</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Berni Software</Authors>
+    <Company>Berni Software</Company>
+    <Product>bFocus</Product>
+    <Copyright>Copyright (c) Berni Software</Copyright>
+    <Description>SDK oficial .NET da API pública do bFocus: clientes, contatos, produtos, release notes, base de conhecimento e agentes de IA. Novas tentativas com idempotência, erros tipados e assinatura de identidade do widget.</Description>
+    <PackageTags>bfocus;sdk;api;helpdesk;atendimento;knowledge-base;release-notes;berni</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/bernisoftware/bfocus-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/bernisoftware/bfocus-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Única dependência de runtime, e só no alvo netstandard2.0 (no net8.0 ela já vem com o runtime). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bfocus.Tests" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+
+</Project>
