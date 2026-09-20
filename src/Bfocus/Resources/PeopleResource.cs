@@ -31,7 +31,7 @@ public sealed class PeopleResource
     /// <summary>
     /// Cria ou atualiza a pessoa do cliente (<c>PUT /customers/{external_id}/people/{person_external_id}</c>). Só os
     /// campos informados mudam. O e-mail (ou o telefone) acha a pessoa que já chegou por e-mail ou por outro sistema —
-    /// ela é adotada, nunca duplicada; a mesma pessoa em outro cliente é transferida. <c>Access = true</c> devolve o
+    /// ela é adotada, nunca duplicada; a mesma pessoa em outro cliente é LIGADA a ele também. <c>Access = true</c> devolve o
     /// acesso retirado por <see cref="DeleteAsync"/>. <see cref="PersonUpsert.CustomFields"/> é a exceção: a lista
     /// enviada SUBSTITUI a lista inteira de campos personalizados da pessoa (campo que ficar de fora é removido).
     /// <see cref="PersonUpsert.Clear"/> APAGA contato (<c>email</c>/<c>phone</c>) — e não se confunde com
@@ -79,8 +79,8 @@ public sealed class PeopleResource
     /// <param name="cancellationToken">Cancelamento.</param>
     /// <returns>A pessoa, com <see cref="Person.Access"/> = <c>false</c>.</returns>
     /// <exception cref="NotFoundException"><c>PERSON_NOT_FOUND</c>.</exception>
-    public Task<Person> DeleteAsync(string customerExternalId, string personExternalId, RequestOptions? options = null, CancellationToken cancellationToken = default) =>
-        _http.RequestAsync<Person>(HttpMethod.Delete, PersonPath(customerExternalId, personExternalId), null, null, options, cancellationToken);
+    public Task<PersonRevokeResult> DeleteAsync(string customerExternalId, string personExternalId, RequestOptions? options = null, CancellationToken cancellationToken = default) =>
+        _http.RequestAsync<PersonRevokeResult>(HttpMethod.Delete, PersonPath(customerExternalId, personExternalId), null, null, options, cancellationToken);
 
     /// <summary>
     /// Cria ou atualiza até <see cref="MaxBatchSize"/> pessoas numa chamada (<c>POST /people/batch</c>), de clientes

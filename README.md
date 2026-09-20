@@ -161,7 +161,10 @@ await bfocus.People.UpsertAsync("erp-1042", "app-77", new PersonUpsert { Access 
 
 - **Sem duplicar**: o e-mail (ou o telefone) acha a pessoa que já chegou por e-mail ou por outro sistema — ela é
   **adotada** pelo seu id, nunca duplicada.
-- **Troca de cliente**: a mesma pessoa enviada com outro cliente é **transferida** para ele.
+- **Outro cliente**: a mesma pessoa enviada com outro cliente NÃO é transferida — fica **ligada**
+  também a ele (`Linked = true`). O cadastro é único e a mesma pessoa circula por vários clientes.
+- **O acesso é do vínculo.** `DeleteAsync` (e `Access = false`) tira o acesso dela NESTE cliente, não
+  nos outros: `PersonRevokeResult.Unlinked = true` quer dizer que ela segue ativa em algum outro.
 - Parcial como todo upsert: `null` = omitido; `ClearFields = { nameof(PersonUpsert.Phone) }` envia `null`.
 - Erros comuns (`Code`): `PERSON_EMAIL_STAFF` (e-mail de alguém da sua equipe), `PERSON_EMAIL_TAKEN`,
   `PERSON_PHONE_TAKEN`, `PERSON_CONTACT_OTHER_CUSTOMER`, `PERSON_CLEAR_FIELD_INVALID`,

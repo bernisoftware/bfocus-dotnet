@@ -51,6 +51,18 @@ public class Customer
     [JsonPropertyName("is_active")]
     public bool IsActive { get; set; }
 
+    /// <summary>Logotipo do cliente, como a equipe subiu no bFocus. <c>null</c> = sem logotipo.</summary>
+    [JsonPropertyName("logo_url")]
+    public string? LogoUrl { get; set; }
+
+    /// <summary>E-mails adicionais do cliente (o principal é <see cref="Email"/>).</summary>
+    [JsonPropertyName("extra_emails")]
+    public IReadOnlyList<string> ExtraEmails { get; set; } = Array.Empty<string>();
+
+    /// <summary>Telefones adicionais do cliente (o principal é <see cref="Phone"/>).</summary>
+    [JsonPropertyName("extra_phones")]
+    public IReadOnlyList<string> ExtraPhones { get; set; } = Array.Empty<string>();
+
     /// <summary>Criado em.</summary>
     [JsonPropertyName("created_at")]
     public DateTimeOffset? CreatedAt { get; set; }
@@ -194,14 +206,43 @@ public class Person
     /// <summary>Campos personalizados da pessoa (a visibilidade de cada um é definida no bFocus).</summary>
     [JsonPropertyName("custom_fields")]
     public IReadOnlyList<CustomField> CustomFields { get; set; } = Array.Empty<CustomField>();
+
+    /// <summary>
+    /// Identificadores EXTRAS desta pessoa: os outros ids pelos quais ela também é encontrada (o principal é
+    /// <see cref="ExternalId"/>). É por aqui que você descobre que o id do SEU sistema virou apelido de outra ficha.
+    /// </summary>
+    [JsonPropertyName("identifiers")]
+    public IReadOnlyList<Identifier> Identifiers { get; set; } = Array.Empty<Identifier>();
 }
 
-/// <summary>Resultado de <see cref="PeopleResource.UpsertAsync"/>: a pessoa + o que aconteceu.</summary>
+/// <summary>Resultado de <see cref="PeopleResource.DeleteAsync"/>: a pessoa + se ela apenas saiu DESTE cliente.</summary>
+public sealed class PersonRevokeResult : Person
+{
+    /// <summary>
+    /// <c>true</c> = ela continua com acesso, porque também é de OUTROS clientes (o acesso é do vínculo);
+    /// <c>false</c> = era só deste cliente e foi desligada, como sempre.
+    /// </summary>
+    [JsonPropertyName("unlinked")]
+    public bool Unlinked { get; set; }
+}
+
+/// <summary>Resultado de <c>people.upsert</c>: a pessoa gravada + o que aconteceu.</summary>
 public sealed class PersonUpsertResult : Person
 {
     /// <summary><c>created</c>, <c>updated</c> ou <c>unchanged</c>.</summary>
     [JsonPropertyName("status")]
     public string Status { get; set; } = string.Empty;
+
+    /// <summary>O id enviado é um APELIDO: este é o <c>external_id</c> principal do cadastro.</summary>
+    [JsonPropertyName("merged_into")]
+    public string? MergedInto { get; set; }
+
+    /// <summary>
+    /// A pessoa JÁ EXISTIA em outro cliente e esta chamada a ligou também a este: o cadastro é único e
+    /// ela circula pelos dois. Nada foi transferido nem duplicado.
+    /// </summary>
+    [JsonPropertyName("linked")]
+    public bool Linked { get; set; }
 }
 
 /// <summary>Identificadores extras de uma pessoa (<see cref="PersonIdentifiersResource"/>).</summary>
@@ -249,6 +290,10 @@ public sealed class BatchItemResult
     /// <summary>O id enviado é um identificador extra: este é o principal do cadastro único — atualize o seu lado.</summary>
     [JsonPropertyName("merged_into")]
     public string? MergedInto { get; set; }
+
+    /// <summary>A pessoa já existia em outro cliente e este item a ligou também a este (cadastro único).</summary>
+    [JsonPropertyName("linked")]
+    public bool Linked { get; set; }
 
     /// <summary>Código estável do erro do item (só com <see cref="Status"/> = <c>error</c>; ex.: <c>NAME_REQUIRED</c>).</summary>
     [JsonPropertyName("error")]
