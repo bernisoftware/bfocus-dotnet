@@ -63,7 +63,11 @@ public sealed class CustomerBatchItem : CustomerUpsert
     public string? ExternalId { get; set; }
 }
 
-/// <summary>Campo personalizado enviado em <see cref="CustomerUpsert.CustomFields"/>.</summary>
+/// <summary>
+/// Campo personalizado enviado em <see cref="CustomerUpsert.CustomFields"/> ou em
+/// <see cref="PersonUpsert.CustomFields"/>. A visibilidade não se envia por aqui: quem vê o campo é decisão do
+/// bFocus.
+/// </summary>
 public sealed class CustomFieldInput
 {
     /// <summary>Cria um campo vazio (preencha <see cref="Key"/>).</summary>
@@ -177,6 +181,32 @@ public class PersonUpsert : PatchRequest
     /// <summary>Telefones adicionais (somam aos que já existem).</summary>
     [JsonPropertyName("extra_phones")]
     public IList<string>? ExtraPhones { get; set; }
+
+    /// <summary>
+    /// Campos personalizados da pessoa. Ao contrário de <see cref="ExtraEmails"/>/<see cref="ExtraPhones"/>, a lista
+    /// SUBSTITUI a lista inteira: mande o que o seu sistema tem hoje, porque campo que ficar de fora é REMOVIDO
+    /// (lista vazia apaga todos). Deixar <c>null</c> não mexe em nada. A visibilidade é decidida no bFocus e
+    /// preservada entre sincronizações.
+    /// </summary>
+    [JsonPropertyName("custom_fields")]
+    public IList<CustomFieldInput>? CustomFields { get; set; }
+
+    /// <summary>
+    /// Campos a <b>APAGAR</b> nesta pessoa: <c>["email"]</c>, <c>["phone"]</c> ou os dois.
+    /// <para>
+    /// Não confunda com <see cref="PatchRequest.ClearFields"/>: aquele manda o campo como <c>null</c>, e em PESSOA
+    /// <c>null</c> significa "não mexe" — quem apaga é esta propriedade. Apagar é EXPLÍCITO de propósito: <c>null</c>,
+    /// lista vazia e não preencher continuam significando "não mexe".
+    /// </para>
+    /// <para>
+    /// Campo fora da lista aceita é RECUSADO (422 <c>PERSON_CLEAR_FIELD_INVALID</c>), não ignorado. E só se limpa a
+    /// PRÓPRIA ficha: alcançando a pessoa por um identificador EXTRA, a API recusa (409
+    /// <c>PERSON_CLEAR_NOT_OWN_RECORD</c>) — apagar contato de ficha alcançada por apelido seria apagar dado de outro
+    /// sistema.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("clear")]
+    public IList<string>? Clear { get; set; }
 }
 
 /// <summary>

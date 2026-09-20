@@ -84,7 +84,7 @@ public sealed class Identifier
     public string Source { get; set; } = string.Empty;
 }
 
-/// <summary>Campo personalizado de um cliente.</summary>
+/// <summary>Campo personalizado de um cliente ou de uma pessoa.</summary>
 public sealed class CustomField
 {
     /// <summary>Chave.</summary>
@@ -190,6 +190,10 @@ public class Person
     /// <summary><c>external_id</c> principal do cliente a que a pessoa pertence.</summary>
     [JsonPropertyName("customer_external_id")]
     public string CustomerExternalId { get; set; } = string.Empty;
+
+    /// <summary>Campos personalizados da pessoa (a visibilidade de cada um é definida no bFocus).</summary>
+    [JsonPropertyName("custom_fields")]
+    public IReadOnlyList<CustomField> CustomFields { get; set; } = Array.Empty<CustomField>();
 }
 
 /// <summary>Resultado de <see cref="PeopleResource.UpsertAsync"/>: a pessoa + o que aconteceu.</summary>

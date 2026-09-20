@@ -535,6 +535,44 @@ public class UnitTests
     }
 
     [Fact]
+    public async Task ConflictErrorData_CarriesContactOwner()
+    {
+        // 409 acionável: `data` diz de QUEM é o contato (e a API repete em `validation`).
+        var dono = new
+        {
+            field = "email",
+            owner_external_id = "app-12",
+            owner_name = "Paula Reis",
+            owner_customer_external_id = "erp-1042",
+        };
+        using var server = new MockServer
+        {
+            Handler = _ => MockResponse.Json(409, new { code = 409, data = dono, error = "PERSON_EMAIL_TAKEN", validation = dono, request_id = "r1" }),
+        };
+        using var client = Client(server);
+
+        var error = await Assert.ThrowsAsync<ConflictException>(
+            () => client.People.UpsertAsync("erp-1042", "app-77", new PersonUpsert { Email = "paula@padaria.example" }));
+
+        Assert.Equal("PERSON_EMAIL_TAKEN", error.Code);
+        Assert.Equal("app-12", error.ErrorData["owner_external_id"].GetString());
+        Assert.Equal("erp-1042", error.ErrorData["owner_customer_external_id"].GetString());
+        Assert.Equal("Paula Reis", error.ErrorData["owner_name"].GetString());
+        Assert.Equal("app-12", error.Validation["owner_external_id"]);
+    }
+
+    [Fact]
+    public async Task ErrorWithoutData_HasEmptyErrorData()
+    {
+        using var server = new MockServer { Handler = _ => MockResponse.Json(404, new { code = 404, data = (object?)null, error = "CUSTOMER_NOT_FOUND" }) };
+        using var client = Client(server);
+
+        var error = await Assert.ThrowsAsync<NotFoundException>(() => client.Customers.GetAsync("erp-1042"));
+
+        Assert.Empty(error.ErrorData);
+    }
+
+    [Fact]
     public async Task UnknownResponseFields_AreIgnored()
     {
         using var server = new MockServer

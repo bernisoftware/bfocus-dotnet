@@ -335,6 +335,7 @@ internal static class ErrorFactory
         string? bodyMessage = null;
         string? requestId = null;
         var validation = new Dictionary<string, string>();
+        var errorData = new Dictionary<string, JsonElement>();
 
         if (!string.IsNullOrWhiteSpace(text))
         {
@@ -347,6 +348,17 @@ internal static class ErrorFactory
                     error = StringOrNull(root, "error");
                     bodyMessage = StringOrNull(root, "message");
                     requestId = StringOrNull(root, "request_id");
+                    // `data`: o detalhe estruturado do erro. A API também o repete em `validation`, mas quem lê
+                    // o erro precisa alcançá-lo sem depender dessa duplicação. Clone() porque o JsonDocument
+                    // é descartado ao sair daqui.
+                    if (root.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var field in d.EnumerateObject())
+                        {
+                            errorData[field.Name] = field.Value.Clone();
+                        }
+                    }
+
                     if (root.TryGetProperty("validation", out var v) && v.ValueKind == JsonValueKind.Object)
                     {
                         foreach (var field in v.EnumerateObject())
@@ -401,14 +413,14 @@ internal static class ErrorFactory
 
         return status switch
         {
-            401 => new AuthenticationException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            403 => new PermissionDeniedException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            404 => new NotFoundException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            409 => new ConflictException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            422 => new ValidationException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            429 => new RateLimitException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            >= 500 and <= 599 => new ServerException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
-            _ => new BfocusException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope),
+            401 => new AuthenticationException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            403 => new PermissionDeniedException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            404 => new NotFoundException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            409 => new ConflictException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            422 => new ValidationException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            429 => new RateLimitException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            >= 500 and <= 599 => new ServerException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
+            _ => new BfocusException(code, status, text2, requestId, validation, exposedRetryAfter, requiredScope, errorData: errorData),
         };
     }
 

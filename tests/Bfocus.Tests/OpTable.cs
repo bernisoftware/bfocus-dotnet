@@ -65,6 +65,8 @@ internal static class OpTable
             await c.People.BatchAsync(a.Raw("items")!.Value.EnumerateArray()
                 .Select(item => Args.BuildPatch<PersonBatchItem>(JsonNode.Parse(item.GetRawText())!.AsObject()))
                 .ToList()),
+        ["people.identifiers.list"] = async (c, a) =>
+            await c.People.Identifiers.ListAsync(a.Str("person_external_id")),
         ["people.identifiers.add"] = async (c, a) =>
             await c.People.Identifiers.AddAsync(a.Str("person_external_id"), a.Str("extra_id"), label: a.OptStr("label")),
         ["people.identifiers.remove"] = async (c, a) =>
