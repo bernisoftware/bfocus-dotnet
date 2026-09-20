@@ -19,6 +19,29 @@ public class Customer
     [JsonPropertyName("external_id")]
     public string ExternalId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Tipo do CONTRATANTE: <c>pj</c> (empresa) ou <c>pf</c> (pessoa física); <c>null</c> quando não dá para saber.
+    /// Cliente é a CONTA, não a pessoa: uma conta PF pode ter várias pessoas dentro.
+    /// </summary>
+    [JsonPropertyName("kind")]
+    public string? Kind { get; set; }
+
+    /// <summary>Só PJ: razão social, quando difere do nome fantasia (que fica em <see cref="Name"/>).</summary>
+    [JsonPropertyName("legal_name")]
+    public string? LegalName { get; set; }
+
+    /// <summary>Só PJ: inscrição estadual (aceita <c>ISENTO</c>).</summary>
+    [JsonPropertyName("state_registration")]
+    public string? StateRegistration { get; set; }
+
+    /// <summary>Só PJ: inscrição municipal.</summary>
+    [JsonPropertyName("municipal_registration")]
+    public string? MunicipalRegistration { get; set; }
+
+    /// <summary>Só PF: RG e órgão emissor (texto livre — o formato varia por estado).</summary>
+    [JsonPropertyName("id_document")]
+    public string? IdDocument { get; set; }
+
     /// <summary>Nome.</summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;

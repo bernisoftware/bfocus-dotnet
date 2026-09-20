@@ -18,6 +18,29 @@ public class CustomerUpsert : PatchRequest
     [JsonPropertyName("document")]
     public string? Document { get; set; }
 
+    /// <summary>
+    /// Tipo do CONTRATANTE: <c>pj</c> (empresa) ou <c>pf</c> (pessoa física). Não enviando, o bFocus deduz do
+    /// documento. Cliente é a CONTA, não a pessoa: uma conta PF pode ter várias pessoas dentro.
+    /// </summary>
+    [JsonPropertyName("kind")]
+    public string? Kind { get; set; }
+
+    /// <summary>Só PJ: razão social, quando difere do nome fantasia que vai em <see cref="Name"/>.</summary>
+    [JsonPropertyName("legal_name")]
+    public string? LegalName { get; set; }
+
+    /// <summary>Só PJ: inscrição estadual (aceita <c>ISENTO</c>).</summary>
+    [JsonPropertyName("state_registration")]
+    public string? StateRegistration { get; set; }
+
+    /// <summary>Só PJ: inscrição municipal.</summary>
+    [JsonPropertyName("municipal_registration")]
+    public string? MunicipalRegistration { get; set; }
+
+    /// <summary>Só PF: RG e órgão emissor (texto livre — o formato varia por estado).</summary>
+    [JsonPropertyName("id_document")]
+    public string? IdDocument { get; set; }
+
     /// <summary>E-mail (até 255).</summary>
     [JsonPropertyName("email")]
     public string? Email { get; set; }
