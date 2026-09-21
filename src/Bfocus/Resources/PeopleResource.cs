@@ -36,6 +36,9 @@ public sealed class PeopleResource
     /// enviada SUBSTITUI a lista inteira de campos personalizados da pessoa (campo que ficar de fora é removido).
     /// <see cref="PersonUpsert.Clear"/> APAGA contato (<c>email</c>/<c>phone</c>) — e não se confunde com
     /// <see cref="PatchRequest.ClearFields"/>, que manda <c>null</c>, o que em pessoa quer dizer "não mexe".
+    /// <see cref="PersonUpsert.Document"/> é o CPF, e a pessoa é ÚNICA: o mesmo CPF é sempre o mesmo cadastro. Id
+    /// desconhecido + CPF existente → <see cref="PersonUpsertResult.MergedInto"/> com o id principal; id de uma ficha +
+    /// CPF de outra → as duas são mescladas na hora. <c>null</c> não apaga.
     /// </summary>
     /// <param name="customerExternalId">Id do cliente no seu sistema.</param>
     /// <param name="personExternalId">Id da pessoa no seu sistema (sem <c>:</c> se ela vai abrir o widget).</param>
@@ -46,10 +49,13 @@ public sealed class PeopleResource
     /// <exception cref="ConflictException">
     /// Ex.: <c>PERSON_EMAIL_STAFF</c> (e-mail de alguém da sua equipe), <c>PERSON_EMAIL_TAKEN</c> /
     /// <c>PERSON_PHONE_TAKEN</c> (o <see cref="BfocusException.ErrorData"/> diz de quem é o contato) ou
-    /// <c>PERSON_CONTACT_OTHER_CUSTOMER</c> (recusa definitiva: a pessoa é de outro cliente); ou
-    /// <c>PERSON_CLEAR_NOT_OWN_RECORD</c>, quando um <see cref="PersonUpsert.Clear"/> chega por um identificador extra.
+    /// <c>PERSON_CONTACT_OTHER_CUSTOMER</c> (o contato é de uma pessoa de OUTRO cliente: a API não liga sozinha;
+    /// o dono vem nos dados do erro, para ligar pelo identificador extra se for a mesma pessoa); ou
+    /// <c>PERSON_CLEAR_NOT_OWN_RECORD</c>, quando um <see cref="PersonUpsert.Clear"/> chega por um identificador extra; ou
+    /// <c>PERSON_DOCUMENT_CONFLICT</c>, quando a ficha já tem OUTRO CPF (nunca troca sozinho).
     /// </exception>
-    /// <exception cref="ValidationException"><c>PERSON_CLEAR_FIELD_INVALID</c>: campo fora da lista aceita em <see cref="PersonUpsert.Clear"/>.</exception>
+    /// <exception cref="ValidationException"><c>PERSON_CLEAR_FIELD_INVALID</c>: campo fora da lista aceita em <see cref="PersonUpsert.Clear"/>;
+    /// <c>PERSON_DOCUMENT_INVALID</c>: CPF inválido em <see cref="PersonUpsert.Document"/>.</exception>
     public Task<PersonUpsertResult> UpsertAsync(string customerExternalId, string personExternalId, PersonUpsert person, RequestOptions? options = null, CancellationToken cancellationToken = default)
     {
         if (person is null)

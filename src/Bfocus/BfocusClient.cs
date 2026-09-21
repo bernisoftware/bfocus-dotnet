@@ -16,7 +16,7 @@ namespace Bfocus;
 public sealed class BfocusClient : IDisposable
 {
     /// <summary>Versão desta SDK (enviada no header <c>X-Bfocus-Client</c> de toda requisição).</summary>
-    public const string Version = "0.2.4";
+    public const string Version = "0.2.5";
 
     /// <summary>URL da API de produção, usada quando <see cref="BfocusClientOptions.BaseUrl"/> não é informado.</summary>
     public const string DefaultBaseUrl = "https://api.bfocus.com.br";

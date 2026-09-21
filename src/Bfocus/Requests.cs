@@ -185,6 +185,22 @@ public class PersonUpsert : PatchRequest
     [JsonPropertyName("phone")]
     public string? Phone { get; set; }
 
+    /// <summary>
+    /// CPF da pessoa, com ou sem máscara (a resposta traz só os 11 dígitos).
+    /// <para>
+    /// A PESSOA É ÚNICA: o mesmo CPF é sempre o mesmo cadastro, em qualquer produto. Id desconhecido + CPF de uma ficha
+    /// existente → a resposta vem com <c>merged_into</c> = id principal dela (o seu id vira identificador extra). Id de
+    /// uma ficha + CPF de OUTRA → as duas são mescladas na hora (<c>merged_into</c> = a que tinha o CPF).
+    /// </para>
+    /// <para>
+    /// <c>null</c>/vazio NÃO apaga (nem via <see cref="PatchRequest.ClearFields"/>; não é campo do <see cref="Clear"/>).
+    /// Erros: 422 <c>PERSON_DOCUMENT_INVALID</c> (CPF inválido) e 409 <c>PERSON_DOCUMENT_CONFLICT</c> (a ficha já tem
+    /// OUTRO CPF — nunca troca sozinho).
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("document")]
+    public string? Document { get; set; }
+
     /// <summary>Cargo/função no cliente (ex.: Financeiro).</summary>
     [JsonPropertyName("role")]
     public string? Role { get; set; }

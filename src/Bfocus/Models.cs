@@ -210,6 +210,10 @@ public class Person
     [JsonPropertyName("phone")]
     public string? Phone { get; set; }
 
+    /// <summary>CPF da pessoa, só os 11 dígitos (<c>null</c> = não informado).</summary>
+    [JsonPropertyName("document")]
+    public string? Document { get; set; }
+
     /// <summary>Cargo/função no cliente.</summary>
     [JsonPropertyName("role")]
     public string? Role { get; set; }
